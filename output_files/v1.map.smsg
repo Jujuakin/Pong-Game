@@ -1,0 +1,5 @@
+Info (10281): Verilog HDL Declaration information at spi_control.sv(12): object "spi_clk" differs only in case from object "SPI_CLK" in the same scope File: C:/3216/216454050_218678144_217586561_Project/spi_control.sv Line: 12
+Info (10281): Verilog HDL Declaration information at spi_serdes.sv(4): object "spi_clk" differs only in case from object "SPI_CLK" in the same scope File: C:/3216/216454050_218678144_217586561_Project/spi_serdes.sv Line: 4
+Info (10281): Verilog HDL Declaration information at spi_serdes.sv(24): object "READ" differs only in case from object "read" in the same scope File: C:/3216/216454050_218678144_217586561_Project/spi_serdes.sv Line: 24
+Warning (10268): Verilog HDL information at clock_divider.sv(10): always construct contains both blocking and non-blocking assignments File: C:/3216/216454050_218678144_217586561_Project/output_files/clock_divider.sv Line: 10
+Warning (10268): Verilog HDL information at puck.sv(26): always construct contains both blocking and non-blocking assignments File: C:/3216/216454050_218678144_217586561_Project/output_files/puck.sv Line: 26
