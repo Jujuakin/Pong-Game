@@ -39,10 +39,10 @@ The game renders a 640×480 VGA field at 60 Hz with two paddles, a puck, and a l
                           │         DE10_LITE_Golden_Top.sv          │
                           │  (Top-level module — connects all below) │
                           └────────────┬──────────────┬─────────────┘
-                                       │              │
+                                      │              │
                ┌───────────────────────┼──────────────┼──────────────────────┐
-               │                       │              │                      │
-    ┌──────────▼──────────┐  ┌─────────▼──────┐  ┌───▼──────────┐  ┌───────▼──────┐
+               │                        │              │                       │
+    ┌──────────┼─────────┐  ┌─────────▖�──────┐  ┌───▖�──────────┐  ┌───────▼──────┐
     │   SPI Stack         │  │  VGA Subsystem │  │  Game Logic  │  │  Scoring     │
     │                     │  │                │  │              │  │              │
     │  spi_serdes.sv      │  │  sync_gen.sv   │  │  ball.sv     │  │  scoreboard  │
@@ -63,7 +63,7 @@ The game renders a 640×480 VGA field at 60 Hz with two paddles, a puck, and a l
 The `pong_control.sv` module implements a 3-state FSM:
 
 ```
-  RESET ──► PLAYING ──► GAME_OVER
+  RESET ──▊ PLAYING ──▊ GAME_OVER
     ▲            │
     └────────────┘ (on timer expiry or KEY press)
 ```
@@ -139,10 +139,10 @@ quartus Final_Project.qpf
 ### Simulate a Module (ModelSim)
 
 ```bash
-# Example: simulate the ball/puck module
+# Example: simulate the puck module
 vsim -do "
-  vlog ball.sv
-  vsim work.ball
+  vlog puck.sv
+  vsim work.puck
   add wave *
   run 500ns
 "
@@ -176,7 +176,7 @@ vsim -do "
 
 **SPI accelerometer integration was the hardest part.** Initializing the ADXL345 requires a specific write sequence over SPI before any axis data is readable. Getting the CPOL/CPHA mode, bit ordering, and CS timing right consumed a significant portion of debugging time. The `spi_control.sv` FSM went through multiple iterations before stable readings were achieved.
 
-**Modular design paid off.** Isolating the VGA timing, game logic, SPI stack, and scoring into separate modules made it straightforward to debug each subsystem independently. When ball-paddle collision detection had an off-by-one pixel error, it was fixable in `ball.sv` without touching the VGA or SPI code.
+**Modular design paid off.** Isolating the VGA timing, game logic, SPI stack, and scoring into separate modules made it straightforward to debug each subsystem independently. When puck-paddle collision detection had an off-by-one pixel error, it was fixable in `puck.sv` without touching the VGA or SPI code.
 
 **Collision detection edge cases.** Puck-paddle collision needed special handling for corner hits (top/bottom edge of paddle) to produce realistic angle deflection, and for high-speed puck states where the puck could tunnel through a paddle in a single clock cycle. Both required adding lookahead logic to the trajectory update.
 
@@ -187,8 +187,8 @@ vsim -do "
 | Time | What to show |
 |---|---|
 | 0:00–0:30 | Open repo, point to the module hierarchy and explain the top-level wiring |
-| 0:30–1:00 | Walk through `ball.sv` — show the collision detection logic and trajectory FSM |
+| 0:30–1:00 | Walk through `puck.sv` — show the collision detection logic and trajectory FSM |
 | 1:00–1:30 | Show `spi_control.sv` — explain the ADXL345 init sequence and why SPI mode matters |
 | 1:30–2:00 | Open Quartus → Compilation Report → show 1,789 LEs, Fmax 80.73 MHz |
-| 2:00–2:30 | Show the `vga_controller.sv` pixel address → color mapping |
+| 2:00–2:30 | Show the `vga_display.sv` pixel address → color mapping |
 | 2:30–3:00 | Demo video — live game running on the DE10-Lite board |
