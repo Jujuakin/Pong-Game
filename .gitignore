@@ -1,0 +1,11 @@
+# Quartus build artifacts
+db/
+incremental_db/
+output_files/
+*.rpt
+*.summary
+*.pin
+*.sof
+*.pof
+*.jdi
+*.qws
