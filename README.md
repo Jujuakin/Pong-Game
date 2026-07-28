@@ -3,7 +3,7 @@
 A fully hardware-implemented two-player Pong game designed in **SystemVerilog** on the **Intel DE10-Lite FPGA board**. Game logic, VGA rendering, accelerometer-driven paddle control, and real-time scoring are all implemented in RTL — zero software, zero processor.
 
 > **Course:** EECS 3216 — Digital Systems Design, York University (Winter 2024)  
-> **Team:** Emmanuel Akin-salami · Bhavitesh Garg · Amr Almazloum
+> **Team:** Eyinojuoluwa Akin-Salami · Bhavitesh Garg · Amr Almazloum
 
 ---
 
@@ -16,7 +16,6 @@ A fully hardware-implemented two-player Pong game designed in **SystemVerilog** 
 - [How to Build & Run](#how-to-build--run)
 - [Tools Used](#tools-used)
 - [Lessons Learned](#lessons-learned)
-- [3-Minute Walkthrough](#3-minute-walkthrough)
 
 ---
 
@@ -26,49 +25,52 @@ The game renders a 640×480 VGA field at 60 Hz with two paddles, a puck, and a l
 
 **Key design constraints:**
 - No CPU — all logic is purely RTL
-- SPI communication to accelerometer sampled in hardware
-- Score displayed on onboard 7-segment displays
-- Game timer resets on button press; paddles respond with < 1 clock cycle latency at game clock rate
+- SPI communication to the accelerometer sampled in hardware
+- Score and remaining time displayed on onboard 7-segment displays
+- Game timer resets on button press
 
 ---
 
 ## Architecture
 
 ```
-                          ┌─────────────────────────────────────────┐
-                          │         DE10_LITE_Golden_Top.sv          │
-                          │  (Top-level module — connects all below) │
-                          └────────────┬──────────────┬─────────────┘
-                                      │              │
-               ┌───────────────────────┼──────────────┼──────────────────────┐
-               │                        │              │                       │
-    ┌──────────┼─────────┐  ┌─────────▖�──────┐  ┌───▖�──────────┐  ┌───────▼──────┐
-    │   SPI Stack         │  │  VGA Subsystem │  │  Game Logic  │  │  Scoring     │
-    │                     │  │                │  │              │  │              │
-    │  spi_serdes.sv      │  │  sync_gen.sv   │  │  ball.sv     │  │  scoreboard  │
-    │  spi_control.sv     │  │  vga_controller│  │  left_paddle │  │  .sv         │
-    │                     │  │  .sv           │  │  .sv         │  │              │
-    │  (ADXL345 ↔ FPGA)  │  │  (640×480@60Hz)│  │  right_paddle│  │  (7-seg HEX) │
-    └──────────────────── ┘  └────────────────┘  │  .sv         │  └──────────────┘
-                                                  │  pong_control│
-                                                  │  .sv (FSM)   │
-                                                  └──────────────┘
+                      ┌──────────────────────────────┐
+                      │  DE10_LITE_Golden_Top.sv     │
+                      │  top level · I/O · paddles   │
+                      └───┬───────┬────────┬─────────┘
+                          │       │        │
+        ┌─────────────────┘       │        └──────────────────┐
+        │                         │                           │
+        ▼                         ▼                           ▼
+┌───────────────┐        ┌────────────────┐          ┌─────────────────┐
+│  SPI Stack    │        │ VGA Subsystem  │          │  Game Logic     │
+│               │        │                │          │                 │
+│ spi_control   │        │ vga_sync.sv    │          │ puck.sv         │
+│ spi_serdes    │        │ vga_display.sv │          │ game_state.sv   │
+│               │        │                │          │ Timer.sv        │
+│ (ADXL345 SPI) │        │ (640×480@60Hz) │          │ clock_divider   │
+└───────────────┘        └────────────────┘          └─────────────────┘
+                                                              │
+                                                              ▼
+                                                     ┌─────────────────┐
+                                                     │ score_display   │
+                                                     │ (7-seg HEX)     │
+                                                     └─────────────────┘
 
-    Board Inputs: ADXL345 accelerometer (SPI), KEY[1:0] buttons
-    Board Outputs: VGA connector (R/G/B + H/V sync), HEX displays (score + timer)
+  Inputs:  ADXL345 accelerometer (SPI), KEY[1:0] buttons
+  Outputs: VGA (R/G/B + H/V sync), HEX displays (score + timer)
 ```
 
-### Game State FSM
+### Finite State Machines
 
-The `pong_control.sv` module implements a 3-state FSM:
+The design contains four FSMs:
 
-```
-  RESET ──▊ PLAYING ──▊ GAME_OVER
-    ▲            │
-    └────────────┘ (on timer expiry or KEY press)
-```
-
-In `PLAYING` state, a nested FSM tracks puck possession (free, left-side, right-side) and updates collision flags on every clock cycle.
+| FSM | Module | Purpose |
+|---|---|---|
+| **Game State** | `game_state.sv` | Overall game progression, driven by score and timer |
+| **Playing State** | `game_state.sv` | Tracks in-play behaviour during an active round |
+| **Color Race Mode** | `game_state.sv` | Alternate game mode |
+| **Reset** | `game_state.sv` | Returns the game to a known start condition on KEY press |
 
 ---
 
@@ -76,37 +78,36 @@ In `PLAYING` state, a nested FSM tracks puck possession (free, left-side, right-
 
 | File | Function |
 |---|---|
-| `DE10_LITE_Golden_Top.sv` | Top-level: wires all modules, maps I/O pins, controls paddle movement |
+| `DE10_LITE_Golden_Top.sv` | Top level: wires all modules, maps I/O pins, controls paddle movement |
 | `puck.sv` | Puck position tracking, wall/paddle collision detection, trajectory update |
-| `game_state.sv` | Game state FSM (RESET → PLAYING → GAME_OVER) |
-| `vga_display.sv` | Pixel address → RGB color mapping; draws field, paddles, puck |
-| `vga_sync.sv` | VGA H/V sync and blanking signal generation (adapted from open-source) |
+| `game_state.sv` | Game state, playing state, colour race mode, and reset FSMs |
+| `vga_display.sv` | Pixel address → RGB colour mapping; draws field, paddles, puck |
+| `vga_sync.sv` | VGA H/V sync and blanking generation *(based on open-source reference)* |
 | `score_display.sv` | Binary-to-7-segment encoder for live score display |
-| `Timer.sv` | 60-second countdown; declares winner on expiry or KEY press reset |
-| `clock_divider.sv` | Generates 1 ms pulse for game timing |
-| `spi_control.sv` | Initializes ADXL345 accelerometer; issues periodic X/Y read commands |
-| `spi_serdes.sv` | 4-wire SPI serializer/deserializer; 8-bit transfer, CPOL=1 CPHA=1 |
+| `Timer.sv` | 60-second countdown; declares winner on expiry or KEY reset |
+| `clock_divider.sv` | Generates a 1 ms pulse for game timing *(based on open-source reference)* |
+| `spi_control.sv` | Initializes the ADXL345; issues periodic X/Y read commands |
+| `spi_serdes.sv` | 4-wire SPI serializer/deserializer |
 
 ---
 
 ## Results
 
-All synthesis and place & route performed with **Quartus Prime Lite** on the **Intel MAX10 (10M50DAF484C7G)** device.
+All synthesis and place & route performed with **Quartus Prime Lite** targeting the **Intel MAX10 (10M50DAF484C7G)**. Figures below are from the Quartus Compilation Report.
 
 | Metric | Value |
 |---|---|
 | Logic Elements (LEs) | 1,789 / 49,760 — **4%** |
-| Registers | 372 / 49,760 — **1%** |
+| Registers | 372 |
 | 9-bit DSP Blocks | 0 / 288 |
-| PLLs | 1 / 4 (for 25 MHz VGA pixel clock) |
+| PLLs | 1 / 4 (25 MHz VGA pixel clock) |
 | **Fmax (Slow 85°C corner)** | **80.73 MHz** |
 | VGA output | 640 × 480 @ 60 Hz |
 | Game clock | 50 MHz (onboard oscillator) |
-| Accelerometer sample rate | Configured via SPI init sequence |
 
-The design is extremely lightweight — 4% LE utilization with significant headroom for additional game features or display elements.
+The design is lightweight — 4% LE utilization leaves substantial headroom for additional game features or display elements.
 
-**Demo:** [Drive link](https://drive.google.com/file/d/12x8Y-OBAWBwtN-MbQ-zOkENaJjP4MvaE/view?usp=drivesdk)
+**Demo:** [Video walkthrough](https://drive.google.com/file/d/12x8Y-OBAWBwtN-MbQ-zOkENaJjP4MvaE/view?usp=drivesdk)
 
 ---
 
@@ -114,48 +115,41 @@ The design is extremely lightweight — 4% LE utilization with significant headr
 
 ### Prerequisites
 
-- Intel Quartus Prime Lite Edition (tested on 21.x / 23.x)
+- Intel Quartus Prime Lite Edition
 - DE10-Lite FPGA development board
 - VGA monitor + cable
-- ModelSim-Altera (optional, for simulation)
+- ModelSim (optional, for simulation)
 
 ### Synthesize & Program
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/Jujuakin/Pong-Game.git
 cd Pong-Game
 
-# 2. Open in Quartus
+# Open in Quartus
 quartus Final_Project.qpf
 
-# 3. Compile (Synthesis → Fitter → Assembler → Timing Analysis)
-#    Processing → Start Compilation  [Ctrl+L]
-
-# 4. Program the board
-#    Tools → Programmer → Add File → output_files/v1.sof → Start
+# Compile: Processing → Start Compilation  [Ctrl+L]
+# Program: Tools → Programmer → output_files/v1.sof → Start
 ```
 
 ### Simulate a Module (ModelSim)
 
 ```bash
-# Example: simulate the puck module
-vsim -do "
-  vlog puck.sv
-  vsim work.puck
-  add wave *
-  run 500ns
-"
+vlog puck.sv
+vsim work.puck
+add wave *
+run 500ns
 ```
 
 ### Play
 
 1. Connect the DE10-Lite to a VGA monitor
-2. Power the board — game starts in **RESET** state
+2. Power the board — the game starts in the reset state
 3. Press **KEY[0]** to start; press again to reset
 4. Tilt the board to move each player's paddle
-5. The 7-segment displays show scores (left / right) and countdown timer
-6. Player with higher score when timer hits 00 wins
+5. The 7-segment displays show scores and the countdown timer
+6. The higher score when the timer reaches 00 wins
 
 ---
 
@@ -163,32 +157,18 @@ vsim -do "
 
 | Tool | Purpose |
 |---|---|
-| Quartus Prime Lite 21.x | Synthesis, place & route, programming |
-| ModelSim-Altera | Behavioral simulation |
+| Quartus Prime Lite | Synthesis, place & route, programming |
+| ModelSim | Behavioural simulation |
 | SystemVerilog (IEEE 1800) | HDL |
-| Intel DE10-Lite | Target FPGA board (MAX10, 50K LEs) |
+| Intel DE10-Lite | Target board (MAX10) |
 | ADXL345 | 3-axis accelerometer (SPI, onboard) |
-| VGA display | 640×480 @ 60 Hz output |
 
 ---
 
 ## Lessons Learned
 
-**SPI accelerometer integration was the hardest part.** Initializing the ADXL345 requires a specific write sequence over SPI before any axis data is readable. Getting the CPOL/CPHA mode, bit ordering, and CS timing right consumed a significant portion of debugging time. The `spi_control.sv` FSM went through multiple iterations before stable readings were achieved.
+**SPI accelerometer integration was the hardest part.** Initializing the ADXL345 requires a specific write sequence over SPI before any axis data is readable. Getting the mode, bit ordering, and chip-select timing right consumed a large share of debugging time — `spi_control.sv` went through several iterations before readings were stable. Finding usable reference material for the on-board accelerometer was itself a real obstacle.
 
-**Modular design paid off.** Isolating the VGA timing, game logic, SPI stack, and scoring into separate modules made it straightforward to debug each subsystem independently. When puck-paddle collision detection had an off-by-one pixel error, it was fixable in `puck.sv` without touching the VGA or SPI code.
+**Modular design paid off.** Isolating VGA timing, game logic, the SPI stack, and scoring into separate modules made each subsystem debuggable on its own. Collision bugs were fixable inside `puck.sv` without touching VGA or SPI code.
 
-**Collision detection edge cases.** Puck-paddle collision needed special handling for corner hits (top/bottom edge of paddle) to produce realistic angle deflection, and for high-speed puck states where the puck could tunnel through a paddle in a single clock cycle. Both required adding lookahead logic to the trajectory update.
-
----
-
-## 3-Minute Walkthrough
-
-| Time | What to show |
-|---|---|
-| 0:00–0:30 | Open repo, point to the module hierarchy and explain the top-level wiring |
-| 0:30–1:00 | Walk through `puck.sv` — show the collision detection logic and trajectory FSM |
-| 1:00–1:30 | Show `spi_control.sv` — explain the ADXL345 init sequence and why SPI mode matters |
-| 1:30–2:00 | Open Quartus → Compilation Report → show 1,789 LEs, Fmax 80.73 MHz |
-| 2:00–2:30 | Show the `vga_display.sv` pixel address → color mapping |
-| 2:30–3:00 | Demo video — live game running on the DE10-Lite board |
+**Synchronizing game elements to VGA timing was non-obvious.** Game state updates had to be paced against the display refresh rather than the 50 MHz system clock, which is what `clock_divider.sv` exists to solve. Getting this wrong produced visible tearing and inconsistent puck speed.
